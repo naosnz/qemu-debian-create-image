@@ -27,11 +27,11 @@ GRUB_CMDLINE=${GRUB_CMDLINE:=quiet}
 ETH_DEVICE=${ETH_DEVICE:=ens3}
 
 clean_debian() {
-	[ "$MNT_DIR" != "" ] && chroot $MNT_DIR umount /proc/ /sys/ /dev/ /boot/
+	([ "$MNT_DIR" != "" ] && sudo chroot $MNT_DIR umount /proc/ /sys/ /dev/ /boot/) || true
 	sleep 1s
-	[ "$MNT_DIR" != "" ] && umount $MNT_DIR
+	[ "$MNT_DIR" != "" ] && sudo umount $MNT_DIR
 	sleep 1s
-	[ "$DISK" != "" ] && $VSYSTEM-nbd -d $DISK
+	[ "$DISK" != "" ] && sudo $VSYSTEM-nbd -d $DISK
 	sleep 1s
 	[ "$MNT_DIR" != "" ] && rm -r $MNT_DIR
 }
@@ -86,13 +86,19 @@ elif [ $FLAVOUR == "ubuntu" ]; then
     BOOT_PKG="linux-image-generic grub-pc"
 fi
 
+if [ `id -u` != 0 ]; then
+   # Pre-activate sudo password cache if not running as root
+   echo "sudo required for root commands"
+   sudo true
+fi
+
 echo "Looking for nbd device..."
 
-modprobe nbd max_part=16 || fail "failed to load nbd module into kernel"
+sudo modprobe nbd max_part=16 || fail "failed to load nbd module into kernel"
 
 for i in /dev/nbd*
 do
-	if $VSYSTEM-nbd -c $i $FILE
+	if sudo $VSYSTEM-nbd -c $i $FILE
 	then
 		DISK=$i
 		break
@@ -105,33 +111,33 @@ echo "Connected $FILE to $DISK"
 
 # New sfdisk on stretch doesn't do -D and -uM anymore
 echo "Partitioning $DISK..."
-sfdisk $DISK -q << EOF || fail "cannot partition $FILE"
+sudo sfdisk $DISK -q << EOF || fail "cannot partition $FILE"
 label: dos
 ,200M,83,*
 ;
 EOF
 
 echo "Creating boot partition..."
-mkfs.ext4 -q ${DISK}p1 || fail "cannot create /boot ext4"
+sudo mkfs.ext4 -q ${DISK}p1 || fail "cannot create /boot ext4"
 
 echo "Creating root partition..."
-mkfs.ext4 -q ${DISK}p2 || fail "cannot create / ext4"
+sudo mkfs.ext4 -q ${DISK}p2 || fail "cannot create / ext4"
 
 echo "Mounting root partition..."
-mount ${DISK}p2 $MNT_DIR || fail "cannot mount /"
+sudo mount ${DISK}p2 $MNT_DIR || fail "cannot mount /"
 
-echo "Installing Debian $RELEASE..."
-debootstrap --include=$INCLUDES $* $RELEASE $MNT_DIR $MIRROR || fail "cannot install $RELEASE into $DISK"
+echo "Installing $FLAVOUR $RELEASE..."
+sudo debootstrap --include=$INCLUDES $* $RELEASE $MNT_DIR $MIRROR || fail "cannot install $RELEASE into $DISK"
 
 echo "Configuring system..."
-cat <<EOF > $MNT_DIR/etc/fstab
+sudo sh -c "cat > $MNT_DIR/etc/fstab" <<EOF
 /dev/${DISKNAME}1 /boot               ext4    sync 0       2
 /dev/${DISKNAME}2 /                   ext4    errors=remount-ro 0       1
 EOF
 
-echo $HOSTNAME > $MNT_DIR/etc/hostname
+sudo sh -c "echo $HOSTNAME > $MNT_DIR/etc/hostname"
 
-cat <<EOF > $MNT_DIR/etc/hosts
+sudo sh -c "cat > $MNT_DIR/etc/hosts" <<EOF
 127.0.0.1       localhost
 127.0.1.1 		$HOSTNAME
 # The following lines are desirable for IPv6 capable hosts
@@ -140,36 +146,36 @@ ff02::1 ip6-allnodes
 ff02::2 ip6-allrouters
 EOF
 
-cat <<EOF > $MNT_DIR/etc/network/interfaces
+sudo sh -c "cat > $MNT_DIR/etc/network/interfaces" <<EOF
 auto lo
 iface lo inet loopback
 EOF
 if [ "$ETH_DEVICE" != "no" ]; then
-	cat <<EOF > $MNT_DIR/etc/network/interfaces
+	sudo sh -c "cat > $MNT_DIR/etc/network/interfaces" <<EOF
 auto ${ETH_DEVICE}
 iface ${ETH_DEVICE} inet dhcp
 EOF
 fi
 
-mount --bind /dev/ $MNT_DIR/dev || fail "cannot bind /dev"
-chroot $MNT_DIR mount -t ext4 ${DISK}p1 /boot || fail "cannot mount /boot"
-chroot $MNT_DIR mount -t proc none /proc || fail "cannot mount /proc"
-chroot $MNT_DIR mount -t sysfs none /sys || fail "cannot mount /sys"
-LANG=C DEBIAN_FRONTEND=noninteractive chroot $MNT_DIR apt-get install -y --force-yes -q $BOOT_PKG || fail "cannot install $BOOT_PKG"
+sudo mount --bind /dev/ $MNT_DIR/dev || fail "cannot bind /dev"
+sudo chroot $MNT_DIR mount -t ext4 ${DISK}p1 /boot || fail "cannot mount /boot"
+sudo chroot $MNT_DIR mount -t proc none /proc || fail "cannot mount /proc"
+sudo chroot $MNT_DIR mount -t sysfs none /sys || fail "cannot mount /sys"
+sudo sh -c "LANG=C DEBIAN_FRONTEND=noninteractive chroot $MNT_DIR apt-get install -y --force-yes -q $BOOT_PKG" || fail "cannot install $BOOT_PKG"
 
-chroot $MNT_DIR grub-install $DISK || fail "cannot install grub"
-sed -i "s|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"${GRUB_CMDLINE}\"|" $MNT_DIR/etc/default/grub
-chroot $MNT_DIR update-grub || fail "cannot update grub"
-chroot $MNT_DIR apt-get clean || fail "unable to clean apt cache"
+sudo chroot $MNT_DIR grub-install $DISK || fail "cannot install grub"
+sudo sed -i "s|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"${GRUB_CMDLINE}\"|" $MNT_DIR/etc/default/grub
+sudo chroot $MNT_DIR update-grub || fail "cannot update grub"
+sudo chroot $MNT_DIR apt-get clean || fail "unable to clean apt cache"
 
-sed -i "s|${DISK}p1|/dev/${DISKNAME}1|g" $MNT_DIR/boot/grub/grub.cfg
-sed -i "s|${DISK}p2|/dev/${DISKNAME}2|g" $MNT_DIR/boot/grub/grub.cfg
+sudo sed -i "s|${DISK}p1|/dev/${DISKNAME}1|g" $MNT_DIR/boot/grub/grub.cfg
+sudo sed -i "s|${DISK}p2|/dev/${DISKNAME}2|g" $MNT_DIR/boot/grub/grub.cfg
 
 # Set root password
-echo "root:${ROOTPASSWD}" | chroot $MNT_DIR chpasswd
+echo "root:${ROOTPASSWD}" | sudo chroot $MNT_DIR chpasswd
 
 echo "Finishing grub installation..."
-chroot $MNT_DIR grub-install $DISK --modules="biosdisk part_msdos" --target=i386-pc || fail "cannot reinstall grub"
+sudo chroot $MNT_DIR grub-install $DISK --modules="biosdisk part_msdos" --target=i386-pc || fail "cannot reinstall grub"
 
 echo "SUCCESS!"
 clean_debian

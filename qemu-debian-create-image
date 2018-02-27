@@ -165,6 +165,7 @@ sudo sh -c "LANG=C DEBIAN_FRONTEND=noninteractive chroot $MNT_DIR apt-get instal
 
 sudo chroot $MNT_DIR grub-install $DISK || fail "cannot install grub"
 sudo sed -i "s|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"${GRUB_CMDLINE}\"|" $MNT_DIR/etc/default/grub
+sudo chroot $MNT_DIR /bin/sh -c "LANG=C apt-get -y purge os-prober" || true # Don't scan other drives
 sudo chroot $MNT_DIR update-grub || fail "cannot update grub"
 sudo chroot $MNT_DIR apt-get clean || fail "unable to clean apt cache"
 

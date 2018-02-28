@@ -26,6 +26,9 @@ DISKNAME=${DISKNAME:=sda}
 GRUB_CMDLINE=${GRUB_CMDLINE:=quiet}
 ETH_DEVICE=${ETH_DEVICE:=ens3}
 
+# Optional additional setup script, run with path to chroot and disk image
+EXTRA_SETUP=${EXTRA_SETUP:=}
+
 clean_debian() {
 	([ "$MNT_DIR" != "" ] && sudo chroot $MNT_DIR umount /proc/ /sys/ /dev/ /boot/) || true
 	sleep 1s
@@ -177,6 +180,11 @@ echo "root:${ROOTPASSWD}" | sudo chroot $MNT_DIR chpasswd
 
 echo "Finishing grub installation..."
 sudo chroot $MNT_DIR grub-install $DISK --modules="biosdisk part_msdos" --target=i386-pc || fail "cannot reinstall grub"
+
+if [ -n "${EXTRA_SETUP}" -a -x "${EXTRA_SETUP}" ]; then
+	echo "Running additional setup script: ${EXTRA_SETUP}"
+	"${EXTRA_SETUP}" "${MNT_DIR}" "${DISK}"
+fi
 
 echo "SUCCESS!"
 clean_debian

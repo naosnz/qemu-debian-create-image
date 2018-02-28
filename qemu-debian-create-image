@@ -99,9 +99,10 @@ echo "Looking for nbd device..."
 
 sudo modprobe nbd max_part=16 || fail "failed to load nbd module into kernel"
 
-for i in /dev/nbd*
+# Try /dev/nbdN in order 0, 1, 2, ... 15, ignoring partition devices (nbdNpN)
+for i in $(ls /dev/nbd* | sort -n -k 3 -t d | grep -v p)
 do
-	if sudo $VSYSTEM-nbd -c $i $FILE
+	if sudo $VSYSTEM-nbd -c $i $FILE 2>/dev/null
 	then
 		DISK=$i
 		break

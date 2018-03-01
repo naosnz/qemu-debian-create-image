@@ -38,7 +38,9 @@ to use with
 you can run the `setup-for-vagrant-base-box` script at the end of the
 setup with:
 
-    export ...         # VM flavour, etc, as above
+    export ...              # VM flavour, etc, as above
+    export DISKNAME=vda     # vagrant-libvirt assumes /dev/vda
+    export ETH_DEVICE=ens5  # vagrant-libvirt uses virtio, which ends up slot 5
     export EXTRA_SETUP=setup-for-vagrant-base-box
     qemu-debian-create-image debian-test.qcow2 debian-test.hostname stretch
 

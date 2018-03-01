@@ -167,17 +167,32 @@ sudo chroot $MNT_DIR mount -t proc none /proc || fail "cannot mount /proc"
 sudo chroot $MNT_DIR mount -t sysfs none /sys || fail "cannot mount /sys"
 sudo sh -c "LANG=C DEBIAN_FRONTEND=noninteractive chroot $MNT_DIR apt-get install -y --force-yes -q $BOOT_PKG" || fail "cannot install $BOOT_PKG"
 
+# Force fsck.ext4 to be installed into initramfs, as auto-detection of
+# filesystem does not work in this chroot install scenario
+#
+sudo chroot "${MNT_DIR}" sh -c "cat >/etc/initramfs-tools/hooks/ext4" <<'EOF'
+#! /bin/sh -e
+PREREQS=""
+case "${1}" in
+    prereqs) echo "${PREREQS}"; exit 0; ;;
+esac
+. /usr/share/initramfs-tools/hook-functions
+copy_exec /sbin/fsck.ext4 /sbin
+EOF
+sudo chroot "${MNT_DIR}" chmod +x /etc/initramfs-tools/hooks/ext4
+sudo chroot "${MNT_DIR}" update-initramfs -u
+
+# Set root password
+echo "root:${ROOTPASSWD}" | sudo chroot $MNT_DIR chpasswd
+
+# Install grub and make disk bootable
 sudo chroot $MNT_DIR grub-install $DISK || fail "cannot install grub"
 sudo sed -i "s|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"${GRUB_CMDLINE}\"|" $MNT_DIR/etc/default/grub
 sudo chroot $MNT_DIR /bin/sh -c "LANG=C apt-get -y purge os-prober" || true # Don't scan other drives
 sudo chroot $MNT_DIR update-grub || fail "cannot update grub"
-sudo chroot $MNT_DIR apt-get clean || fail "unable to clean apt cache"
 
 sudo sed -i "s|${DISK}p1|/dev/${DISKNAME}1|g" $MNT_DIR/boot/grub/grub.cfg
 sudo sed -i "s|${DISK}p2|/dev/${DISKNAME}2|g" $MNT_DIR/boot/grub/grub.cfg
-
-# Set root password
-echo "root:${ROOTPASSWD}" | sudo chroot $MNT_DIR chpasswd
 
 echo "Finishing grub installation..."
 sudo chroot $MNT_DIR grub-install $DISK --modules="biosdisk part_msdos" --target=i386-pc || fail "cannot reinstall grub"
@@ -186,6 +201,8 @@ if [ -n "${EXTRA_SETUP}" -a -x "${EXTRA_SETUP}" ]; then
 	echo "Running additional setup script: ${EXTRA_SETUP}"
 	"${EXTRA_SETUP}" "${MNT_DIR}" "${DISK}"
 fi
+
+sudo chroot $MNT_DIR apt-get clean || fail "unable to clean apt cache"
 
 echo "SUCCESS!"
 clean_debian

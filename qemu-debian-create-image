@@ -189,6 +189,17 @@ echo "root:${ROOTPASSWD}" | sudo chroot $MNT_DIR chpasswd
 sudo chroot $MNT_DIR grub-install $DISK || fail "cannot install grub"
 sudo sed -i "s|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"${GRUB_CMDLINE}\"|" $MNT_DIR/etc/default/grub
 sudo chroot $MNT_DIR /bin/sh -c "LANG=C apt-get -y purge os-prober" || true # Don't scan other drives
+
+if echo "${GRUB_CMDLINE}" | grep -q "ttyS0"; then
+	# Find speed in "console=tty0 console=ttyS0,115200" -- default 9600 bps
+	SERIAL_SPEED=$(echo "${GRUB_CMDLINE}" | sed 's/^.*ttyS0,//; s/,? .*$//;')
+	SERIAL_SPEED=${SERIAL_SPEED:=9600}
+
+	echo "Configuring grub for serial console ttyS0,${SERIAL_SPEED}"
+        GRUB_SERIAL_COMMAND="serial --speed=${SERIAL_SPEED} --unit=0 --word=8 --parity=no --stop=1"
+	sudo sed -i 's|^.*GRUB_TERMINAL=.*$|GRUB_TERMINAL="console serial"|' "${MNT_DIR}/etc/default/grub"
+        sudo sed -i "/GRUB_TERMINAL/a GRUB_SERIAL_COMMAND=\"${GRUB_SERIAL_COMMAND}\"" "${MNT_DIR}/etc/default/grub"
+fi
 sudo chroot $MNT_DIR update-grub || fail "cannot update grub"
 
 sudo sed -i "s|${DISK}p1|/dev/${DISKNAME}1|g" $MNT_DIR/boot/grub/grub.cfg

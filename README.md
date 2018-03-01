@@ -29,6 +29,22 @@ and with that style of `MIRROR` value [should allow running offline
 providing all packages are
 cached](https://askubuntu.com/questions/958795/how-do-i-use-debootstrap-with-apt-cacher-ng).
 
+### Vagrant base box
+
+To do additional setup for a
+[Vagrant Base Box](https://www.vagrantup.com/docs/boxes/base.html),
+to use with
+[`vagrant-libvirt`](https://github.com/vagrant-libvirt/vagrant-libvirt)
+you can run the `setup-for-vagrant-base-box` script at the end of the
+setup with:
+
+    export ...         # VM flavour, etc, as above
+    export EXTRA_SETUP=setup-for-vagrant-base-box
+    qemu-debian-create-image debian-test.qcow2 debian-test.hostname stretch
+
+and the script referred to by `EXTRA_SETUP` will be run at the end, before
+unmounting the disk image.
+
 ## History
 
 *  Manual procedure designed and documented by

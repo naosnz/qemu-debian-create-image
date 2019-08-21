@@ -155,10 +155,21 @@ auto lo
 iface lo inet loopback
 EOF
 if [ "$ETH_DEVICE" != "no" ]; then
+  if [ "$FLAVOUR" = "ubuntu" -a "$RELEASE" = "bionic" ]; then
+	sudo sh -c "mkdir -p $MNT_DIR/etc/netplan && cat > $MNT_DIR/etc/netplan/50-dhcp.yaml" <<EOF
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    ${ETH_DEVICE}:
+      dhcp4: true
+EOF
+  else
 	sudo sh -c "cat > $MNT_DIR/etc/network/interfaces" <<EOF
 auto ${ETH_DEVICE}
 iface ${ETH_DEVICE} inet dhcp
 EOF
+  fi
 fi
 
 sudo mount --bind /dev/ $MNT_DIR/dev || fail "cannot bind /dev"

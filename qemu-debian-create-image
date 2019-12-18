@@ -84,7 +84,11 @@ if [ ! -f $FILE ]; then
 fi
 
 if [ $FLAVOUR == "debian" ]; then
-    BOOT_PKG="linux-image-$ARCH grub-pc"
+    if [ $ARCH == "i386" ]; then
+        BOOT_PKG="linux-image-686-pae grub-pc"
+    else
+        BOOT_PKG="linux-image-$ARCH grub-pc"
+    fi
 elif [ $FLAVOUR == "ubuntu" ]; then
     BOOT_PKG="linux-image-generic grub-pc"
 fi
@@ -131,7 +135,7 @@ echo "Mounting root partition..."
 sudo mount ${DISK}p2 $MNT_DIR || fail "cannot mount /"
 
 echo "Installing $FLAVOUR $RELEASE..."
-sudo debootstrap --include=$INCLUDES $* $RELEASE $MNT_DIR $MIRROR || fail "cannot install $RELEASE into $DISK"
+sudo debootstrap --include=$INCLUDES --arch="${ARCH}" $* $RELEASE $MNT_DIR $MIRROR || fail "cannot install $RELEASE into $DISK"
 
 echo "Configuring system..."
 sudo sh -c "cat > $MNT_DIR/etc/fstab" <<EOF

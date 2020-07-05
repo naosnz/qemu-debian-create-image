@@ -67,9 +67,7 @@ trap cancel INT
 
 echo "Installing $RELEASE into $FILE..."
 
-MNT_DIR=`tempfile`
-rm $MNT_DIR
-mkdir $MNT_DIR
+MNT_DIR=$(mktemp -d)
 DISK=
 
 # add apt cacher for faster rebuilds, runs on 3142

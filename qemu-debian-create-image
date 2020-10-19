@@ -100,6 +100,7 @@ fi
 echo "Looking for nbd device..."
 
 sudo modprobe nbd max_part=16 || fail "failed to load nbd module into kernel"
+sleep 1s      # Allow time for device nodes to auto-appear
 
 # Try /dev/nbdN in order 0, 1, 2, ... 15, ignoring partition devices (nbdNpN)
 for i in $(ls /dev/nbd* | sort -n -k 3 -t d | grep -v p)
@@ -107,6 +108,7 @@ do
 	if sudo $VSYSTEM-nbd -c $i $FILE 2>/dev/null
 	then
 		DISK=$i
+		sleep 2s      # Allow time for device to settle
 		break
 	fi
 done
@@ -152,12 +154,35 @@ ff02::1 ip6-allnodes
 ff02::2 ip6-allrouters
 EOF
 
-sudo sh -c "cat > $MNT_DIR/etc/network/interfaces" <<EOF
+# Ubuntu releases use Netplan, and after Bionic even for loopback
+# TODO: Figure out a better way to make this self-maintaining
+#
+DO_NETPLAN=false
+DO_LOOPBACK=true
+#
+if [ "$FLAVOUR" = "ubuntu" ]; then
+  # https://en.wikipedia.org/wiki/Ubuntu_version_history
+  case "${RELEASE}" in
+    bionic|cosmic|disco|eoan|focal|groovy)
+      DO_NETPLAN=true
+      DO_LOOPBACK=false
+      ;;
+  esac
+
+  if [ "${RELEASE}" = "bionic" ]; then
+      DO_LOOPBACK=true
+  fi
+fi
+
+if [ "${DO_LOOPBACK}" = "true" ]; then
+  sudo sh -c "cat > $MNT_DIR/etc/network/interfaces" <<EOF
 auto lo
 iface lo inet loopback
 EOF
+fi
+
 if [ "$ETH_DEVICE" != "no" ]; then
-  if [ "$FLAVOUR" = "ubuntu" -a "$RELEASE" = "bionic" ]; then
+  if [ "${DO_NETPLAN}" = "true" ]; then
 	sudo sh -c "mkdir -p $MNT_DIR/etc/netplan && cat > $MNT_DIR/etc/netplan/50-dhcp.yaml" <<EOF
 network:
   version: 2

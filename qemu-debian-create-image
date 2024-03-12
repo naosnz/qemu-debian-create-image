@@ -163,7 +163,11 @@ DO_LOOPBACK=true
 if [ "$FLAVOUR" = "ubuntu" ]; then
   # https://en.wikipedia.org/wiki/Ubuntu_version_history
   case "${RELEASE}" in
-    bionic|cosmic|disco|eoan|focal|groovy)
+    bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy)
+      DO_NETPLAN=true
+      DO_LOOPBACK=false
+      ;;
+    kinetic|lunar|mantal|noble)
       DO_NETPLAN=true
       DO_LOOPBACK=false
       ;;

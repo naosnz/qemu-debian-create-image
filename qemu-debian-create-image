@@ -187,13 +187,19 @@ fi
 
 if [ "$ETH_DEVICE" != "no" ]; then
   if [ "${DO_NETPLAN}" = "true" ]; then
-	sudo sh -c "mkdir -p $MNT_DIR/etc/netplan && cat > $MNT_DIR/etc/netplan/50-dhcp.yaml" <<EOF
+    # NOTE: we need to force netplan to use the mac address as the
+    # DHCP identifier, as that is no longer the default (instead
+    # systemd-networkd defaults to using a hash of /etc/machine-id)
+    # https://netplan.readthedocs.io/en/latest/netplan-yaml/
+    #
+    sudo sh -c "mkdir -p $MNT_DIR/etc/netplan && cat > $MNT_DIR/etc/netplan/50-dhcp.yaml" <<EOF
 network:
   version: 2
   renderer: networkd
   ethernets:
     ${ETH_DEVICE}:
       dhcp4: true
+      dhcp-identifier: mac
 EOF
   else
 	sudo sh -c "cat > $MNT_DIR/etc/network/interfaces" <<EOF
@@ -256,6 +262,53 @@ if [ -n "${EXTRA_SETUP}" -a -x "${EXTRA_SETUP}" ]; then
 fi
 
 sudo chroot $MNT_DIR apt-get clean || fail "unable to clean apt cache"
+
+# Clean up systemd "exclude from cloned image" files -- particularly machine_id
+# is increasingly used to "uniquely" identify a system, so duplicating it
+# can cause problems (including duplicate IP addresses).
+# (/var/lib/dbus/machine-id is Debian/Ubuntu specific)
+#
+# systemd in Ubuntu 22.04 LTS can recover from a truncated /etc/machine-id
+# on a read-only file system, but not from a deleted /etc/machine-id on
+# a read only file system.  So we need to truncate the file, and then
+# commit it after we have booted to turn it back into a real file.
+#
+# However an empty /var/lib/dbus/machine-id is not recreated, but a
+# deleted one should be recreated automatically from the systemd one.
+# So we need to delete /var/lib/dbus/machine-id
+#
+# https://systemd.io/BUILDING_IMAGES/
+# https://wiki.debian.org/MachineId
+#
+if [ -x "${MNT_DIR}/usr/bin/systemd-machine-id-setup" ]; then
+    # We need to save the machine-id on first boot, since we wiped it above
+    # and likely ended up with a temporary one mounted over it
+    #
+    sudo chroot "${MNT_DIR}" truncate -s 0 /etc/machine-id
+    sudo chroot "${MNT_DIR}" rm -f /var/lib/dbus/machine-id
+    sudo chroot "${MNT_DIR}" rm -f /var/lib/systemd/random-seed
+    sudo chroot "${MNT_DIR}" rm -f var/lib/systemd/credential.secret
+
+    sudo sh -c "mkdir -p $MNT_DIR/etc/systemd/system && cat > $MNT_DIR/etc/systemd/system/firstboot.service" <<EOF
+[Unit]
+Description=Auto Create machine-id on First Boot
+Documentation=man:systemd-firstboot(1)
+DefaultDependencies=no
+Conflicts=shutdown.target
+After=systemd-remount-fs.service
+Before=systemd-networkd.service
+ConditionPathIsReadWrite=/etc
+ConditionFirstBoot=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/systemd-machine-id-setup --commit
+StandardOutput=tty
+StandardInput=tty
+StandardError=tty
+EOF
+fi
 
 echo "SUCCESS!"
 clean_debian
